@@ -11,11 +11,11 @@ export async function verifySession(req?: any) {
       return null
     }
 
-    const session = queryOne(
+    const session = await queryOne(
       `SELECT s.user_id, u.email, u.name, u.role, s.expires_at
        FROM sessions s
        JOIN users u ON s.user_id = u.id
-       WHERE s.id = ? AND s.expires_at > datetime('now')`,
+       WHERE s.id = $1 AND s.expires_at > NOW()`,
       [sessionId]
     )
 

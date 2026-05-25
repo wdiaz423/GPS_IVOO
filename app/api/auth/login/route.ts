@@ -16,8 +16,8 @@ export async function POST(req: NextRequest) {
     }
 
     // Find user
-    const user = queryOne(
-      'SELECT id, email, password_hash, name, role FROM users WHERE email = ?',
+    const user = await queryOne(
+      'SELECT id, email, password_hash, name, role FROM users WHERE email = $1',
       [email]
     )
 
@@ -42,9 +42,9 @@ export async function POST(req: NextRequest) {
     const now = new Date().toISOString()
     const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
 
-    query(
+    await query(
       `INSERT INTO sessions (id, user_id, expires_at, created_at)
-       VALUES (?, ?, ?, ?)`,
+       VALUES ($1, $2, $3, $4)`,
       [sessionId, user.id, expiresAt, now]
     )
 
@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 30 * 24 * 60 * 60, // 30 days
+      maxAge: 30 * 24 * 60 * 60,
     })
 
     return response
