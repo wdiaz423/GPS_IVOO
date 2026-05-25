@@ -1,43 +1,32 @@
+import { cookies } from 'next/headers'
+import { queryOne } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
-import { query } from '@/lib/db'
-import { createHash } from 'crypto'
 
-export interface AuthenticatedRequest extends NextRequest {
-  user?: {
-    id: number
-    email: string
-    full_name: string
-    role: string
-  }
-}
-
-export async function verifySession(req: NextRequest) {
+export async function verifySession(req?: any) {
   try {
-    const sessionToken = req.cookies.get('session_token')?.value
+    const cookieStore = await cookies()
+    const sessionId = cookieStore.get('auth_session')?.value
 
-    if (!sessionToken) {
+    if (!sessionId) {
       return null
     }
 
-    const tokenHash = createHash('sha256').update(sessionToken).digest('hex')
-
-    const result = await query(
-      `SELECT s.user_id, u.email, u.full_name, u.role, s.expires_at
+    const session = queryOne(
+      `SELECT s.user_id, u.email, u.name, u.role, s.expires_at
        FROM sessions s
        JOIN users u ON s.user_id = u.id
-       WHERE s.token_hash = $1 AND s.expires_at > NOW()`,
-      [tokenHash]
+       WHERE s.id = ? AND s.expires_at > datetime('now')`,
+      [sessionId]
     )
 
-    if (result.rows.length === 0) {
+    if (!session) {
       return null
     }
 
-    const session = result.rows[0]
     return {
       id: session.user_id,
       email: session.email,
-      full_name: session.full_name,
+      name: session.name,
       role: session.role,
     }
   } catch (error) {
@@ -56,3 +45,5 @@ export async function requireAuth(req: NextRequest) {
   }
   return user
 }
+
+

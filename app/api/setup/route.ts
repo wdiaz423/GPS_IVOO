@@ -1,32 +1,31 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { query } from '@/lib/db'
-import fs from 'fs'
-import path from 'path'
+import { NextResponse } from 'next/server'
+import { initializeDatabase } from '@/lib/init-db'
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
-    // Read and execute the schema setup script
-    const schemaPath = path.join(process.cwd(), 'scripts', '001-setup-gps-tracking-schema.sql')
-    const schemaSql = fs.readFileSync(schemaPath, 'utf-8')
+    console.log('[v0] Setup API called - initializing database')
+    const success = initializeDatabase()
 
-    // Split by semicolons and execute each statement
-    const statements = schemaSql.split(';').filter(stmt => stmt.trim())
-
-    for (const statement of statements) {
-      await query(statement)
+    if (success) {
+      return NextResponse.json({
+        success: true,
+        message: 'Database initialized successfully',
+      })
+    } else {
+      return NextResponse.json(
+        {
+          success: false,
+          message: 'Database initialization failed',
+        },
+        { status: 500 }
+      )
     }
-
-    return NextResponse.json({
-      success: true,
-      message: 'Database schema created successfully',
-      statementsExecuted: statements.length,
-    })
   } catch (error) {
-    console.error('[v0] Database setup error:', error)
+    console.error('[v0] Setup error:', error)
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        message: error instanceof Error ? error.message : 'Unknown error',
       },
       { status: 500 }
     )

@@ -1,42 +1,30 @@
-import { Pool, ClientBase } from 'pg'
-import { Signer } from '@aws-sdk/rds-signer'
-import { awsCredentialsProvider } from '@vercel/functions/oidc'
-import { attachDatabasePool } from '@vercel/functions'
+import { getDatabase, queryOne as sqliteQueryOne, query as sqliteQuery, execute, transaction } from './db-sqlite'
 
-const signer = new Signer({
-  credentials: awsCredentialsProvider({
-    roleArn: process.env.AWS_ROLE_ARN,
-    clientConfig: { region: process.env.AWS_REGION },
-  }),
-  region: process.env.AWS_REGION,
-  hostname: process.env.PGHOST,
-  username: process.env.PGUSER || 'postgres',
-  port: 5432,
-})
+// For development with SQLite
+// If using Aurora PostgreSQL in production, replace with pg Pool
 
-const pool = new Pool({
-  host: process.env.PGHOST,
-  database: process.env.PGDATABASE || 'postgres',
-  port: 5432,
-  user: process.env.PGUSER || 'postgres',
-  password: () => signer.getAuthToken(),
-  ssl: { rejectUnauthorized: false },
-  max: 20,
-})
-
-attachDatabasePool(pool)
-
-export async function query(text: string, params?: unknown[]) {
-  return pool.query(text, params)
+function convertSql(sql: string): string {
+  return sql
+    .replace(/\$(\d+)/g, '?') // Replace $1, $2 with ?
+    .replace(/SERIAL/g, 'INTEGER') // SERIAL -> INTEGER
+    .replace(/TIMESTAMPTZ/g, 'DATETIME') // TIMESTAMPTZ -> DATETIME
+    .replace(/DEFAULT CURRENT_TIMESTAMP/g, "DEFAULT CURRENT_TIMESTAMP DEFAULT (datetime('now'))") // Handle timestamps
 }
 
-export async function withConnection<T>(
-  fn: (client: ClientBase) => Promise<T>,
-): Promise<T> {
-  const client = await pool.connect()
-  try {
-    return await fn(client)
-  } finally {
-    client.release()
-  }
+export function query(sql: string, params?: any[]) {
+  const sqliteSql = convertSql(sql)
+  return sqliteQuery(sqliteSql, params)
 }
+
+export function queryOne(sql: string, params?: any[]) {
+  const sqliteSql = convertSql(sql)
+  return sqliteQueryOne(sqliteSql, params)
+}
+
+export function exec(sql: string, params?: any[]) {
+  const sqliteSql = convertSql(sql)
+  return execute(sqliteSql, params)
+}
+
+export { transaction }
+

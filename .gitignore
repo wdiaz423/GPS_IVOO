@@ -9,6 +9,12 @@ __v0_jsx-dev-runtime.ts
 # Environment variables
 .env*.local
 
+# Database
+data/
+*.db
+*.db-wal
+*.db-shm
+
 # Common ignores
 node_modules
 .next/

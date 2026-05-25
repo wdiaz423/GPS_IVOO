@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { query } from '@/lib/db'
-import { verifyPassword, generateSessionToken } from '@/lib/auth'
-import { createHash } from 'crypto'
+import { queryOne, query } from '@/lib/db'
+import { verifyPassword } from '@/lib/auth'
+import { nanoid } from 'nanoid'
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,19 +16,17 @@ export async function POST(req: NextRequest) {
     }
 
     // Find user
-    const result = await query(
-      'SELECT id, email, password_hash, full_name, role FROM users WHERE email = $1',
+    const user = queryOne(
+      'SELECT id, email, password_hash, name, role FROM users WHERE email = ?',
       [email]
     )
 
-    if (result.rows.length === 0) {
+    if (!user) {
       return NextResponse.json(
         { error: 'Invalid email or password' },
         { status: 401 }
       )
     }
-
-    const user = result.rows[0]
 
     // Verify password
     const passwordValid = await verifyPassword(password, user.password_hash)
@@ -39,15 +37,15 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Generate session token
-    const sessionToken = generateSessionToken()
-    const tokenHash = createHash('sha256').update(sessionToken).digest('hex')
-    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
+    // Create session
+    const sessionId = nanoid()
+    const now = new Date().toISOString()
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
 
-    await query(
-      `INSERT INTO sessions (user_id, token_hash, expires_at)
-       VALUES ($1, $2, $3)`,
-      [user.id, tokenHash, expiresAt]
+    query(
+      `INSERT INTO sessions (id, user_id, expires_at, created_at)
+       VALUES (?, ?, ?, ?)`,
+      [sessionId, user.id, expiresAt, now]
     )
 
     // Set session cookie
@@ -57,13 +55,13 @@ export async function POST(req: NextRequest) {
         user: {
           id: user.id,
           email: user.email,
-          full_name: user.full_name,
+          name: user.name,
           role: user.role,
         },
       }
     )
 
-    response.cookies.set('session_token', sessionToken, {
+    response.cookies.set('auth_session', sessionId, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
@@ -74,7 +72,7 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error('[v0] Login error:', error)
     return NextResponse.json(
-      { error: 'Login failed' },
+      { error: 'Login failed', details: error instanceof Error ? error.message : '' },
       { status: 500 }
     )
   }
