@@ -52,10 +52,9 @@ export default function RegisterPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          full_name: formData.full_name,
+          name: formData.full_name,
           email: formData.email,
           password: formData.password,
-          role: 'owner',
         }),
       })
 
