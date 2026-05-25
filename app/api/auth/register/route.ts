@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { query, queryOne } from '@/lib/db'
 import { hashPassword } from '@/lib/auth'
 import { nanoid } from 'nanoid'
+import { createHash } from 'crypto'
 
 export async function POST(req: NextRequest) {
   try {
@@ -39,22 +40,23 @@ export async function POST(req: NextRequest) {
     const now = new Date().toISOString()
 
     const result = await query(
-      `INSERT INTO users (id, email, password_hash, name, role, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING id, email, name, role`,
-      [userId, email, password_hash, name, 'owner', now, now]
+      `INSERT INTO users (email, password_hash, full_name, role, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, email, full_name, role`,
+      [email, password_hash, name, 'owner', now, now]
     )
 
     const user = result.rows[0]
 
     // Create session
-    const sessionId = nanoid()
+    const sessionToken = nanoid()
+    const tokenHash = createHash('sha256').update(sessionToken).digest('hex')
     const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
 
     await query(
-      `INSERT INTO sessions (id, user_id, expires_at, created_at)
+      `INSERT INTO sessions (user_id, token_hash, expires_at, created_at)
        VALUES ($1, $2, $3, $4)`,
-      [sessionId, userId, expiresAt, now]
+      [user.id, tokenHash, expiresAt, now]
     )
 
     // Set session cookie
@@ -64,14 +66,14 @@ export async function POST(req: NextRequest) {
         user: {
           id: user.id,
           email: user.email,
-          name: user.name,
+          full_name: user.full_name,
           role: user.role,
         },
       },
       { status: 201 }
     )
 
-    response.cookies.set('auth_session', sessionId, {
+    response.cookies.set('auth_session', sessionToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
